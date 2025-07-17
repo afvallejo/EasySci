@@ -61,7 +61,10 @@ echo
 ## STAR alignment
 echo "Start alignment using STAR..."
 mkdir -p $output_folder/STAR_alignment
-STAR --genomeDir $index --genomeLoad Remove
+star_tmp="/dev/shm/STARtmp-$(basename "$index")"
+if [ -d "$star_tmp" ]; then
+    STAR --genomeDir $index --genomeLoad Remove
+fi
 
 for sample in $(cat $sample_ID)
 do 
@@ -69,18 +72,22 @@ echo "Aligning $sample..."
 STAR --runThreadN $cores --outSAMstrandField intronMotif --genomeDir $index --readFilesCommand zcat --readFilesIn $output_folder/trimmed_fastqs/$sample*R1*gz $output_folder/trimmed_fastqs/$sample*R2*gz --outFileNamePrefix $output_folder/STAR_alignment/$sample --genomeLoad LoadAndKeep
 done
 
-STAR --genomeDir $index --genomeLoad Remove
+star_tmp="/dev/shm/STARtmp-$(basename "$index")"
+if [ -d "$star_tmp" ]; then
+    STAR --genomeDir $index --genomeLoad Remove
+fi
 echo "Done aligning"
 echo
 
 
 ## Transfer STAR log files
 mkdir -p $output_folder/report/Log_files
-mv Log.out $output_folder/report/Log_files/
-mv Log.progress.out $output_folder/report/Log_files/
-mv Aligned.out.sam $output_folder/report/Log_files/
-mv SJ.out.tab $output_folder/report/Log_files/
-mv Log.final.out $output_folder/report/Log_files/
+# Move STAR logs produced during alignment
+mv $output_folder/STAR_alignment/*Log.out $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Log.progress.out $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Aligned.out.sam $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*SJ.out.tab $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Log.final.out $output_folder/report/Log_files/ 2>/dev/null
 
 
 ## Sorting and filtering SAM files
@@ -188,7 +195,10 @@ echo
 ## STAR alignment
 echo "Start alignment using STAR..."
 mkdir -p $output_folder/STAR_alignment
-STAR --genomeDir $index --genomeLoad Remove
+star_tmp="/dev/shm/STARtmp-$(basename "$index")"
+if [ -d "$star_tmp" ]; then
+    STAR --genomeDir $index --genomeLoad Remove
+fi
 
 for sample in $(cat $sample_ID)
 do 
@@ -196,18 +206,22 @@ echo "Aligning $sample..."
 STAR --runThreadN $cores --outSAMstrandField intronMotif --genomeDir $index --readFilesCommand zcat --readFilesIn $output_folder/trimmed_fastqs/$sample*R2*gz --outFileNamePrefix $output_folder/STAR_alignment/$sample --genomeLoad LoadAndKeep
 done
 
-STAR --genomeDir $index --genomeLoad Remove
+star_tmp="/dev/shm/STARtmp-$(basename "$index")"
+if [ -d "$star_tmp" ]; then
+    STAR --genomeDir $index --genomeLoad Remove
+fi
 echo "Done aligning"
 echo
 
 
 ## Transfer STAR log files
 mkdir -p $output_folder/report/Log_files
-mv Log.out $output_folder/report/Log_files/
-mv Log.progress.out $output_folder/report/Log_files/
-mv Aligned.out.sam $output_folder/report/Log_files/
-mv SJ.out.tab $output_folder/report/Log_files/
-mv Log.final.out $output_folder/report/Log_files/
+# Move STAR logs produced during alignment
+mv $output_folder/STAR_alignment/*Log.out $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Log.progress.out $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Aligned.out.sam $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*SJ.out.tab $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Log.final.out $output_folder/report/Log_files/ 2>/dev/null
 
 
 ## Sorting and filtering SAM files

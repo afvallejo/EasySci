@@ -28,7 +28,11 @@ if sequencing_type == "paired-end":
     # STAR alignment
     print("Start alignment using STAR...")
     os.makedirs(os.path.join(output_folder, 'STAR_alignment'), exist_ok=True)
-    subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
+    # Clear any STAR genome that might still be loaded from previous runs.
+    # STAR exits with an error if no genome is loaded, so check before calling.
+    star_tmp = f"/dev/shm/STARtmp-{os.path.basename(index.rstrip('/'))}"
+    if os.path.exists(star_tmp):
+        subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
 
     for sample in samples:
         print(f"Aligning {sample}...")
@@ -40,16 +44,22 @@ if sequencing_type == "paired-end":
             r2 = r2_files[0]
             subprocess.run(['STAR', '--runThreadN', str(cores), '--outSAMstrandField', 'intronMotif', '--genomeDir', index, '--readFilesCommand', 'zcat', '--readFilesIn', os.path.join(trimmed_dir, r1), os.path.join(trimmed_dir, r2), '--outFileNamePrefix', os.path.join(output_folder, 'STAR_alignment/', sample + '_'), '--genomeLoad', 'LoadAndKeep'])
 
-    subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
+    # Clear previous STAR genome only if it is present in shared memory.
+    star_tmp = f"/dev/shm/STARtmp-{os.path.basename(index.rstrip('/'))}"
+    if os.path.exists(star_tmp):
+        subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
     print("Done aligning")
     print()
 
     # Transfer STAR log files
-    os.makedirs(os.path.join(output_folder, 'report/Log_files'), exist_ok=True)
-    log_files = ['Log.out', 'Log.progress.out', 'Aligned.out.sam', 'SJ.out.tab', 'Log.final.out']
-    for log_file in log_files:
-        if os.path.exists(log_file):
-            shutil.move(log_file, os.path.join(output_folder, 'report/Log_files', log_file))
+    log_dir = os.path.join(output_folder, 'report/Log_files')
+    os.makedirs(log_dir, exist_ok=True)
+    for sample in samples:
+        prefix = os.path.join(output_folder, 'STAR_alignment', sample)
+        for suffix in ['Log.out', 'Log.progress.out', 'Aligned.out.sam', 'SJ.out.tab', 'Log.final.out']:
+            src = prefix + suffix
+            if os.path.exists(src):
+                shutil.move(src, os.path.join(log_dir, os.path.basename(src)))
 
     # Sorting and filtering SAM files
     print("Start sorting and filtering...")
@@ -183,7 +193,10 @@ else:  # single-end
     # STAR alignment
     print("Start alignment using STAR...")
     os.makedirs(os.path.join(output_folder, 'STAR_alignment'), exist_ok=True)
-    subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
+    # Clear any STAR genome left from a previous run before alignment.
+    star_tmp = f"/dev/shm/STARtmp-{os.path.basename(index.rstrip('/'))}"
+    if os.path.exists(star_tmp):
+        subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
 
     for sample in samples:
         print(f"Aligning {sample}...")
@@ -193,16 +206,22 @@ else:  # single-end
             r2 = r2_files[0]
             subprocess.run(['STAR', '--runThreadN', str(cores), '--outSAMstrandField', 'intronMotif', '--genomeDir', index, '--readFilesCommand', 'zcat', '--readFilesIn', os.path.join(trimmed_dir, r2), '--outFileNamePrefix', os.path.join(output_folder, 'STAR_alignment/', sample + '_'), '--genomeLoad', 'LoadAndKeep'])
 
-    subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
+    # Remove STAR genome from shared memory when alignment is done.
+    star_tmp = f"/dev/shm/STARtmp-{os.path.basename(index.rstrip('/'))}"
+    if os.path.exists(star_tmp):
+        subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
     print("Done aligning")
     print()
 
     # Transfer STAR log files
-    os.makedirs(os.path.join(output_folder, 'report/Log_files'), exist_ok=True)
-    log_files = ['Log.out', 'Log.progress.out', 'Aligned.out.sam', 'SJ.out.tab', 'Log.final.out']
-    for log_file in log_files:
-        if os.path.exists(log_file):
-            shutil.move(log_file, os.path.join(output_folder, 'report/Log_files', log_file))
+    log_dir = os.path.join(output_folder, 'report/Log_files')
+    os.makedirs(log_dir, exist_ok=True)
+    for sample in samples:
+        prefix = os.path.join(output_folder, 'STAR_alignment', sample)
+        for suffix in ['Log.out', 'Log.progress.out', 'Aligned.out.sam', 'SJ.out.tab', 'Log.final.out']:
+            src = prefix + suffix
+            if os.path.exists(src):
+                shutil.move(src, os.path.join(log_dir, os.path.basename(src)))
 
     # Sorting and filtering SAM files
     print("Start sorting and filtering...")
