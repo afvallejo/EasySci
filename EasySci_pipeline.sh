@@ -61,7 +61,10 @@ echo
 ## STAR alignment
 echo "Start alignment using STAR..."
 mkdir -p $output_folder/STAR_alignment
-STAR --genomeDir $index --genomeLoad Remove
+star_tmp="/dev/shm/STARtmp-$(basename "$index")"
+if [ -d "$star_tmp" ]; then
+    STAR --genomeDir $index --genomeLoad Remove
+fi
 
 for sample in $(cat $sample_ID)
 do 
@@ -69,7 +72,10 @@ echo "Aligning $sample..."
 STAR --runThreadN $cores --outSAMstrandField intronMotif --genomeDir $index --readFilesCommand zcat --readFilesIn $output_folder/trimmed_fastqs/$sample*R1*gz $output_folder/trimmed_fastqs/$sample*R2*gz --outFileNamePrefix $output_folder/STAR_alignment/$sample --genomeLoad LoadAndKeep
 done
 
-STAR --genomeDir $index --genomeLoad Remove
+star_tmp="/dev/shm/STARtmp-$(basename "$index")"
+if [ -d "$star_tmp" ]; then
+    STAR --genomeDir $index --genomeLoad Remove
+fi
 echo "Done aligning"
 echo
 
@@ -188,7 +194,10 @@ echo
 ## STAR alignment
 echo "Start alignment using STAR..."
 mkdir -p $output_folder/STAR_alignment
-STAR --genomeDir $index --genomeLoad Remove
+star_tmp="/dev/shm/STARtmp-$(basename "$index")"
+if [ -d "$star_tmp" ]; then
+    STAR --genomeDir $index --genomeLoad Remove
+fi
 
 for sample in $(cat $sample_ID)
 do 
@@ -196,7 +205,10 @@ echo "Aligning $sample..."
 STAR --runThreadN $cores --outSAMstrandField intronMotif --genomeDir $index --readFilesCommand zcat --readFilesIn $output_folder/trimmed_fastqs/$sample*R2*gz --outFileNamePrefix $output_folder/STAR_alignment/$sample --genomeLoad LoadAndKeep
 done
 
-STAR --genomeDir $index --genomeLoad Remove
+star_tmp="/dev/shm/STARtmp-$(basename "$index")"
+if [ -d "$star_tmp" ]; then
+    STAR --genomeDir $index --genomeLoad Remove
+fi
 echo "Done aligning"
 echo
 
