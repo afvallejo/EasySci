@@ -1,10 +1,36 @@
 # Cell 6: Run the pipeline based on sequencing_type
+import os
+import subprocess
+import shutil
+import gzip
+import logging
+
+# set up logging
+log_dir = os.path.join(output_folder, 'report', 'Log_files')
+os.makedirs(log_dir, exist_ok=True)
+logging.basicConfig(
+    filename=os.path.join(log_dir, 'pipeline.log'),
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s:%(message)s'
+)
+
+def run_and_log(cmd, shell=False):
+    """Run a command and log its output"""
+    logging.info("Running: %s", cmd if shell else ' '.join(cmd))
+    result = subprocess.run(cmd, shell=shell, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True)
+    if result.stdout:
+        logging.info(result.stdout)
+    if result.returncode != 0:
+        logging.error("Command returned %s", result.returncode)
+    return result.returncode
+
 if sequencing_type == "paired-end":
     # Barcode the reads
     print("Barcoding reads...")
     script = os.path.join(script_folder, 'barcoding_reads_paired.py')
     os.makedirs(os.path.join(output_folder, 'barcoded_fastqs'), exist_ok=True)
-    subprocess.run(['python', script, fastq_folder, sample_ID, os.path.join(output_folder, 'barcoded_fastqs'), ligation_barcode_file, RT_barcode_file, str(cores), randomN_barcode_file])
+    run_and_log(['python', script, fastq_folder, sample_ID, os.path.join(output_folder, 'barcoded_fastqs'), ligation_barcode_file, RT_barcode_file, str(cores), randomN_barcode_file])
     print("Done barcoding reads")
 
     # Trim the reads
@@ -18,7 +44,7 @@ if sequencing_type == "paired-end":
         if r1_files and r2_files:
             r1 = r1_files[0]
             r2 = r2_files[0]
-            subprocess.run(['trim_galore', '--paired', os.path.join(output_folder, 'barcoded_fastqs', r1), os.path.join(output_folder, 'barcoded_fastqs', r2), '-a2', 'AAAAAAAA', '--stringency', '3', '-o', os.path.join(output_folder, 'trimmed_fastqs')])
+            run_and_log(['trim_galore', '--paired', os.path.join(output_folder, 'barcoded_fastqs', r1), os.path.join(output_folder, 'barcoded_fastqs', r2), '-a2', 'AAAAAAAA', '--stringency', '3', '-o', os.path.join(output_folder, 'trimmed_fastqs')])
 
     with Pool(cores) as p:
         p.map(trim, samples)
@@ -32,7 +58,7 @@ if sequencing_type == "paired-end":
     # STAR exits with an error if no genome is loaded, so check before calling.
     star_tmp = f"/dev/shm/STARtmp-{os.path.basename(index.rstrip('/'))}"
     if os.path.exists(star_tmp):
-        subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
+        run_and_log(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
 
     for sample in samples:
         print(f"Aligning {sample}...")
@@ -42,12 +68,12 @@ if sequencing_type == "paired-end":
         if r1_files and r2_files:
             r1 = r1_files[0]
             r2 = r2_files[0]
-            subprocess.run(['STAR', '--runThreadN', str(cores), '--outSAMstrandField', 'intronMotif', '--genomeDir', index, '--readFilesCommand', 'zcat', '--readFilesIn', os.path.join(trimmed_dir, r1), os.path.join(trimmed_dir, r2), '--outFileNamePrefix', os.path.join(output_folder, 'STAR_alignment/', sample + '_'), '--genomeLoad', 'LoadAndKeep'])
+            run_and_log(['STAR', '--runThreadN', str(cores), '--outSAMstrandField', 'intronMotif', '--genomeDir', index, '--readFilesCommand', 'zcat', '--readFilesIn', os.path.join(trimmed_dir, r1), os.path.join(trimmed_dir, r2), '--outFileNamePrefix', os.path.join(output_folder, 'STAR_alignment/', sample + '_'), '--genomeLoad', 'LoadAndKeep'])
 
     # Clear previous STAR genome only if it is present in shared memory.
     star_tmp = f"/dev/shm/STARtmp-{os.path.basename(index.rstrip('/'))}"
     if os.path.exists(star_tmp):
-        subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
+        run_and_log(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
     print("Done aligning")
     print()
 
@@ -73,11 +99,11 @@ if sequencing_type == "paired-end":
         final_sam = os.path.join(output_folder, 'filtered_sam', f'{sample}.sam')
 
         cmd = f"samtools view -q 30 -f 2 -F 780 {sam_file} | sort -k1,1 -k3,3 -k4,4n > {noheader}"
-        os.system(cmd)
+        run_and_log(cmd, shell=True)
 
-        os.system(f"grep '@' {sam_file} > {header}")
+        run_and_log(f"grep '@' {sam_file} > {header}", shell=True)
 
-        os.system(f"cat {header} {noheader} > {final_sam}")
+        run_and_log(f"cat {header} {noheader} > {final_sam}", shell=True)
 
         os.remove(header)
         os.remove(noheader)
@@ -92,7 +118,7 @@ if sequencing_type == "paired-end":
     print("Start removing duplicates...")
     os.makedirs(os.path.join(output_folder, 'duplicates_removed'), exist_ok=True)
     script = os.path.join(script_folder, 'duplicate_removal_paired.py')
-    subprocess.run(['python', script, os.path.join(output_folder, 'filtered_sam/'), sample_ID, os.path.join(output_folder, 'duplicates_removed/'), str(cores)])
+    run_and_log(['python', script, os.path.join(output_folder, 'filtered_sam/'), sample_ID, os.path.join(output_folder, 'duplicates_removed/'), str(cores)])
     print("Done removing duplicates.")
     print()
 
@@ -111,7 +137,9 @@ if sequencing_type == "paired-end":
 
     def count_sam_pairs(file_path):
         if os.path.exists(file_path):
+            logging.info("Counting SAM pairs in %s", file_path)
             result = subprocess.run(['samtools', 'view', file_path], stdout=subprocess.PIPE, text=True)
+            logging.info(result.stdout)
             return len(result.stdout.splitlines()) // 2
         return 0
 
@@ -138,7 +166,7 @@ if sequencing_type == "paired-end":
     print("Start the gene count....")
     os.makedirs(os.path.join(output_folder, 'report/Gene_count/'), exist_ok=True)
     script = os.path.join(script_folder, 'gene_counting_paired.py')
-    subprocess.run(['python', script, gtf_file, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Gene_count/'), sample_ID, str(cores), randomN_barcode_file])
+    run_and_log(['python', script, gtf_file, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Gene_count/'), sample_ID, str(cores), randomN_barcode_file])
     print("Gene count done")
     print()
 
@@ -146,7 +174,7 @@ if sequencing_type == "paired-end":
     print("Start the gene post processing....")
     script = os.path.join(script_folder, 'post_processing_genes.py')
     os.makedirs(os.path.join(output_folder, 'report/out/genes/'), exist_ok=True)
-    subprocess.run(['python', script, os.path.join(output_folder, 'report/Gene_count/'), os.path.join(output_folder, 'report/out/genes/'), sample_ID, RT_barcode_matching_file])
+    run_and_log(['python', script, os.path.join(output_folder, 'report/Gene_count/'), os.path.join(output_folder, 'report/out/genes/'), sample_ID, RT_barcode_matching_file])
     print("Done with the gene post processing")
     print()
 
@@ -154,7 +182,7 @@ if sequencing_type == "paired-end":
     print("Start the exon count....")
     os.makedirs(os.path.join(output_folder, 'report/Exon_count/'), exist_ok=True)
     script = os.path.join(script_folder, 'exon_counting_paired.py')
-    subprocess.run(['python', script, gtf_file_exons, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Exon_count/'), sample_ID, str(cores)])
+    run_and_log(['python', script, gtf_file_exons, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Exon_count/'), sample_ID, str(cores)])
     print("Exon count done")
     print()
 
@@ -162,7 +190,7 @@ if sequencing_type == "paired-end":
     print("Start the exon post processing....")
     script = os.path.join(script_folder, 'post_processing_exons.py')
     os.makedirs(os.path.join(output_folder, 'report/out/exons/'), exist_ok=True)
-    subprocess.run(['python', script, os.path.join(output_folder, 'report/Exon_count/'), os.path.join(output_folder, 'report/out/exons/'), sample_ID, RT_barcode_matching_file, sequencing_type])
+    run_and_log(['python', script, os.path.join(output_folder, 'report/Exon_count/'), os.path.join(output_folder, 'report/out/exons/'), sample_ID, RT_barcode_matching_file, sequencing_type])
     print("Done with the exon post processing")
     print()
 
@@ -171,7 +199,7 @@ else:  # single-end
     print("Barcoding reads...")
     script = os.path.join(script_folder, 'barcoding_reads_single.py')
     os.makedirs(os.path.join(output_folder, 'barcoded_fastqs'), exist_ok=True)
-    subprocess.run(['python', script, fastq_folder, sample_ID, os.path.join(output_folder, 'barcoded_fastqs'), ligation_barcode_file, RT_barcode_file, str(cores)])
+    run_and_log(['python', script, fastq_folder, sample_ID, os.path.join(output_folder, 'barcoded_fastqs'), ligation_barcode_file, RT_barcode_file, str(cores)])
     print("Done barcoding reads")
 
     # Trim the reads
@@ -183,7 +211,7 @@ else:  # single-end
         r2_files = [f for f in os.listdir(os.path.join(output_folder, 'barcoded_fastqs')) if sample in f and 'R2' in f and f.endswith('.gz')]
         if r2_files:
             r2 = r2_files[0]
-            subprocess.run(['trim_galore', os.path.join(output_folder, 'barcoded_fastqs', r2), '-a', 'AAAAAAAA', '--stringency', '3', '--three_prime_clip_R1', '1', '-o', os.path.join(output_folder, 'trimmed_fastqs')])
+            run_and_log(['trim_galore', os.path.join(output_folder, 'barcoded_fastqs', r2), '-a', 'AAAAAAAA', '--stringency', '3', '--three_prime_clip_R1', '1', '-o', os.path.join(output_folder, 'trimmed_fastqs')])
 
     with Pool(cores) as p:
         p.map(trim, samples)
@@ -196,7 +224,7 @@ else:  # single-end
     # Clear any STAR genome left from a previous run before alignment.
     star_tmp = f"/dev/shm/STARtmp-{os.path.basename(index.rstrip('/'))}"
     if os.path.exists(star_tmp):
-        subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
+        run_and_log(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
 
     for sample in samples:
         print(f"Aligning {sample}...")
@@ -204,12 +232,12 @@ else:  # single-end
         r2_files = [f for f in os.listdir(trimmed_dir) if sample in f and 'R2' in f and f.endswith('.gz')]
         if r2_files:
             r2 = r2_files[0]
-            subprocess.run(['STAR', '--runThreadN', str(cores), '--outSAMstrandField', 'intronMotif', '--genomeDir', index, '--readFilesCommand', 'zcat', '--readFilesIn', os.path.join(trimmed_dir, r2), '--outFileNamePrefix', os.path.join(output_folder, 'STAR_alignment/', sample + '_'), '--genomeLoad', 'LoadAndKeep'])
+            run_and_log(['STAR', '--runThreadN', str(cores), '--outSAMstrandField', 'intronMotif', '--genomeDir', index, '--readFilesCommand', 'zcat', '--readFilesIn', os.path.join(trimmed_dir, r2), '--outFileNamePrefix', os.path.join(output_folder, 'STAR_alignment/', sample + '_'), '--genomeLoad', 'LoadAndKeep'])
 
     # Remove STAR genome from shared memory when alignment is done.
     star_tmp = f"/dev/shm/STARtmp-{os.path.basename(index.rstrip('/'))}"
     if os.path.exists(star_tmp):
-        subprocess.run(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
+        run_and_log(['STAR', '--genomeDir', index, '--genomeLoad', 'Remove'])
     print("Done aligning")
     print()
 
@@ -235,11 +263,11 @@ else:  # single-end
         final_sam = os.path.join(output_folder, 'filtered_sam', f'{sample}.sam')
 
         cmd = f"samtools view -q 30 -F 772 {sam_file} | sort -k1,1 -k3,3 -k4,4n > {noheader}"
-        os.system(cmd)
+        run_and_log(cmd, shell=True)
 
-        os.system(f"grep '@' {sam_file} > {header}")
+        run_and_log(f"grep '@' {sam_file} > {header}", shell=True)
 
-        os.system(f"cat {header} {noheader} > {final_sam}")
+        run_and_log(f"cat {header} {noheader} > {final_sam}", shell=True)
 
         os.remove(header)
         os.remove(noheader)
@@ -254,7 +282,7 @@ else:  # single-end
     print("Start removing duplicates...")
     os.makedirs(os.path.join(output_folder, 'duplicates_removed'), exist_ok=True)
     script = os.path.join(script_folder, 'duplicate_removal_single.py')
-    subprocess.run(['python', script, os.path.join(output_folder, 'filtered_sam/'), sample_ID, os.path.join(output_folder, 'duplicates_removed/'), str(cores)])
+    run_and_log(['python', script, os.path.join(output_folder, 'filtered_sam/'), sample_ID, os.path.join(output_folder, 'duplicates_removed/'), str(cores)])
     print("Done removing duplicates.")
     print()
 
@@ -267,7 +295,9 @@ else:  # single-end
 
     def count_sam(file_path):
         if os.path.exists(file_path):
+            logging.info("Counting SAM records in %s", file_path)
             result = subprocess.run(['samtools', 'view', file_path], stdout=subprocess.PIPE, text=True)
+            logging.info(result.stdout)
             return len(result.stdout.splitlines())
         return 0
 
@@ -294,7 +324,7 @@ else:  # single-end
     print("Start the gene count....")
     os.makedirs(os.path.join(output_folder, 'report/Gene_count/'), exist_ok=True)
     script = os.path.join(script_folder, 'gene_counting_single.py')
-    subprocess.run(['python', script, gtf_file, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Gene_count/'), sample_ID, str(cores), randomN_barcode_file])
+    run_and_log(['python', script, gtf_file, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Gene_count/'), sample_ID, str(cores), randomN_barcode_file])
     print("Gene count done")
     print()
 
@@ -302,7 +332,7 @@ else:  # single-end
     print("Start the gene post processing....")
     script = os.path.join(script_folder, 'post_processing_genes.py')
     os.makedirs(os.path.join(output_folder, 'report/out/genes/'), exist_ok=True)
-    subprocess.run(['python', script, os.path.join(output_folder, 'report/Gene_count/'), os.path.join(output_folder, 'report/out/genes/'), sample_ID, RT_barcode_matching_file])
+    run_and_log(['python', script, os.path.join(output_folder, 'report/Gene_count/'), os.path.join(output_folder, 'report/out/genes/'), sample_ID, RT_barcode_matching_file])
     print("Done with the gene post processing")
     print()
 
@@ -310,7 +340,7 @@ else:  # single-end
     print("Start the exon count....")
     os.makedirs(os.path.join(output_folder, 'report/Exon_count/'), exist_ok=True)
     script = os.path.join(script_folder, 'exon_counting_single.py')
-    subprocess.run(['python', script, gtf_file_exons, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Exon_count/'), sample_ID, str(cores)])
+    run_and_log(['python', script, gtf_file_exons, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Exon_count/'), sample_ID, str(cores)])
     print("Exon count done")
     print()
 
@@ -318,6 +348,6 @@ else:  # single-end
     print("Start the exon post processing....")
     script = os.path.join(script_folder, 'post_processing_exons.py')
     os.makedirs(os.path.join(output_folder, 'report/out/exons/'), exist_ok=True)
-    subprocess.run(['python', script, os.path.join(output_folder, 'report/Exon_count/'), os.path.join(output_folder, 'report/out/exons/'), sample_ID, RT_barcode_matching_file, sequencing_type])
+    run_and_log(['python', script, os.path.join(output_folder, 'report/Exon_count/'), os.path.join(output_folder, 'report/out/exons/'), sample_ID, RT_barcode_matching_file, sequencing_type])
     print("Done with the exon post processing")
     print()
