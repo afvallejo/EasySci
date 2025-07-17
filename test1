@@ -4,6 +4,33 @@ import subprocess
 import shutil
 import gzip
 import logging
+import sys
+from multiprocessing import Pool
+
+# ensure modules in script_folder can be imported
+current_dir = os.path.dirname(os.path.abspath(__file__))
+default_script_folder = os.path.join(current_dir, 'script_folder')
+script_folder = globals().get('script_folder', default_script_folder)
+if script_folder not in sys.path:
+    sys.path.insert(0, script_folder)
+
+# pandas is required by several helper scripts. Attempt to install it if missing.
+try:
+    import pandas  # noqa: F401
+except ModuleNotFoundError:
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'pandas'])
+    import pandas  # noqa: F401
+
+from barcoding_reads_paired import attach_UMI_files as attach_UMI_files_paired
+from barcoding_reads_single import attach_UMI_files as attach_UMI_files_single
+from duplicate_removal_paired import run_paralell as dedup_paired
+from duplicate_removal_single import run_paralell as dedup_single
+from gene_counting_paired import EasySci_count_parallel as gene_count_paired
+from gene_counting_single import EasySci_count_parallel as gene_count_single
+from exon_counting_paired import EasySci_count_parallel as exon_count_paired
+from exon_counting_single import EasySci_count_parallel as exon_count_single
+from post_processing_genes import merge_gene_count_files as process_genes
+from post_processing_exons import merge_gene_count_files as process_exons
 
 # set up logging
 log_dir = os.path.join(output_folder, 'report', 'Log_files')
@@ -28,9 +55,16 @@ def run_and_log(cmd, shell=False):
 if sequencing_type == "paired-end":
     # Barcode the reads
     print("Barcoding reads...")
-    script = os.path.join(script_folder, 'barcoding_reads_paired.py')
     os.makedirs(os.path.join(output_folder, 'barcoded_fastqs'), exist_ok=True)
-    run_and_log(['python', script, fastq_folder, sample_ID, os.path.join(output_folder, 'barcoded_fastqs'), ligation_barcode_file, RT_barcode_file, str(cores), randomN_barcode_file])
+    attach_UMI_files_paired(
+        fastq_folder,
+        sample_ID,
+        os.path.join(output_folder, 'barcoded_fastqs'),
+        ligation_barcode_file,
+        RT_barcode_file,
+        cores,
+        randomN_barcode_file,
+    )
     print("Done barcoding reads")
 
     # Trim the reads
@@ -117,8 +151,12 @@ if sequencing_type == "paired-end":
     # Removing duplicates
     print("Start removing duplicates...")
     os.makedirs(os.path.join(output_folder, 'duplicates_removed'), exist_ok=True)
-    script = os.path.join(script_folder, 'duplicate_removal_paired.py')
-    run_and_log(['python', script, os.path.join(output_folder, 'filtered_sam/'), sample_ID, os.path.join(output_folder, 'duplicates_removed/'), str(cores)])
+    dedup_paired(
+        os.path.join(output_folder, 'filtered_sam/'),
+        sample_ID,
+        os.path.join(output_folder, 'duplicates_removed/'),
+        cores,
+    )
     print("Done removing duplicates.")
     print()
 
@@ -165,41 +203,67 @@ if sequencing_type == "paired-end":
     # Count the genes
     print("Start the gene count....")
     os.makedirs(os.path.join(output_folder, 'report/Gene_count/'), exist_ok=True)
-    script = os.path.join(script_folder, 'gene_counting_paired.py')
-    run_and_log(['python', script, gtf_file, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Gene_count/'), sample_ID, str(cores), randomN_barcode_file])
+    gene_count_paired(
+        gtf_file,
+        os.path.join(output_folder, 'duplicates_removed/'),
+        os.path.join(output_folder, 'report/Gene_count/'),
+        sample_ID,
+        cores,
+        randomN_barcode_file,
+    )
     print("Gene count done")
     print()
 
     # Post processing genes
     print("Start the gene post processing....")
-    script = os.path.join(script_folder, 'post_processing_genes.py')
     os.makedirs(os.path.join(output_folder, 'report/out/genes/'), exist_ok=True)
-    run_and_log(['python', script, os.path.join(output_folder, 'report/Gene_count/'), os.path.join(output_folder, 'report/out/genes/'), sample_ID, RT_barcode_matching_file])
+    process_genes(
+        os.path.join(output_folder, 'report/Gene_count/'),
+        os.path.join(output_folder, 'report/out/genes/'),
+        sample_ID,
+        RT_barcode_matching_file,
+    )
     print("Done with the gene post processing")
     print()
 
     # Count the exons
     print("Start the exon count....")
     os.makedirs(os.path.join(output_folder, 'report/Exon_count/'), exist_ok=True)
-    script = os.path.join(script_folder, 'exon_counting_paired.py')
-    run_and_log(['python', script, gtf_file_exons, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Exon_count/'), sample_ID, str(cores)])
+    exon_count_paired(
+        gtf_file_exons,
+        os.path.join(output_folder, 'duplicates_removed/'),
+        os.path.join(output_folder, 'report/Exon_count/'),
+        sample_ID,
+        cores,
+    )
     print("Exon count done")
     print()
 
     # Post processing exons
     print("Start the exon post processing....")
-    script = os.path.join(script_folder, 'post_processing_exons.py')
     os.makedirs(os.path.join(output_folder, 'report/out/exons/'), exist_ok=True)
-    run_and_log(['python', script, os.path.join(output_folder, 'report/Exon_count/'), os.path.join(output_folder, 'report/out/exons/'), sample_ID, RT_barcode_matching_file, sequencing_type])
+    process_exons(
+        os.path.join(output_folder, 'report/Exon_count/'),
+        os.path.join(output_folder, 'report/out/exons/'),
+        sample_ID,
+        RT_barcode_matching_file,
+        sequencing_type,
+    )
     print("Done with the exon post processing")
     print()
 
 else:  # single-end
     # Barcode the reads
     print("Barcoding reads...")
-    script = os.path.join(script_folder, 'barcoding_reads_single.py')
     os.makedirs(os.path.join(output_folder, 'barcoded_fastqs'), exist_ok=True)
-    run_and_log(['python', script, fastq_folder, sample_ID, os.path.join(output_folder, 'barcoded_fastqs'), ligation_barcode_file, RT_barcode_file, str(cores)])
+    attach_UMI_files_single(
+        fastq_folder,
+        sample_ID,
+        os.path.join(output_folder, 'barcoded_fastqs'),
+        ligation_barcode_file,
+        RT_barcode_file,
+        cores,
+    )
     print("Done barcoding reads")
 
     # Trim the reads
@@ -281,8 +345,12 @@ else:  # single-end
     # Removing duplicates
     print("Start removing duplicates...")
     os.makedirs(os.path.join(output_folder, 'duplicates_removed'), exist_ok=True)
-    script = os.path.join(script_folder, 'duplicate_removal_single.py')
-    run_and_log(['python', script, os.path.join(output_folder, 'filtered_sam/'), sample_ID, os.path.join(output_folder, 'duplicates_removed/'), str(cores)])
+    dedup_single(
+        os.path.join(output_folder, 'filtered_sam/'),
+        sample_ID,
+        os.path.join(output_folder, 'duplicates_removed/'),
+        cores,
+    )
     print("Done removing duplicates.")
     print()
 
@@ -323,31 +391,51 @@ else:  # single-end
     # Count the genes
     print("Start the gene count....")
     os.makedirs(os.path.join(output_folder, 'report/Gene_count/'), exist_ok=True)
-    script = os.path.join(script_folder, 'gene_counting_single.py')
-    run_and_log(['python', script, gtf_file, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Gene_count/'), sample_ID, str(cores), randomN_barcode_file])
+    gene_count_single(
+        gtf_file,
+        os.path.join(output_folder, 'duplicates_removed/'),
+        os.path.join(output_folder, 'report/Gene_count/'),
+        sample_ID,
+        cores,
+        randomN_barcode_file,
+    )
     print("Gene count done")
     print()
 
     # Post processing genes
     print("Start the gene post processing....")
-    script = os.path.join(script_folder, 'post_processing_genes.py')
     os.makedirs(os.path.join(output_folder, 'report/out/genes/'), exist_ok=True)
-    run_and_log(['python', script, os.path.join(output_folder, 'report/Gene_count/'), os.path.join(output_folder, 'report/out/genes/'), sample_ID, RT_barcode_matching_file])
+    process_genes(
+        os.path.join(output_folder, 'report/Gene_count/'),
+        os.path.join(output_folder, 'report/out/genes/'),
+        sample_ID,
+        RT_barcode_matching_file,
+    )
     print("Done with the gene post processing")
     print()
 
     # Count the exons
     print("Start the exon count....")
     os.makedirs(os.path.join(output_folder, 'report/Exon_count/'), exist_ok=True)
-    script = os.path.join(script_folder, 'exon_counting_single.py')
-    run_and_log(['python', script, gtf_file_exons, os.path.join(output_folder, 'duplicates_removed/'), os.path.join(output_folder, 'report/Exon_count/'), sample_ID, str(cores)])
+    exon_count_single(
+        gtf_file_exons,
+        os.path.join(output_folder, 'duplicates_removed/'),
+        os.path.join(output_folder, 'report/Exon_count/'),
+        sample_ID,
+        cores,
+    )
     print("Exon count done")
     print()
 
     # Post processing exons
     print("Start the exon post processing....")
-    script = os.path.join(script_folder, 'post_processing_exons.py')
     os.makedirs(os.path.join(output_folder, 'report/out/exons/'), exist_ok=True)
-    run_and_log(['python', script, os.path.join(output_folder, 'report/Exon_count/'), os.path.join(output_folder, 'report/out/exons/'), sample_ID, RT_barcode_matching_file, sequencing_type])
+    process_exons(
+        os.path.join(output_folder, 'report/Exon_count/'),
+        os.path.join(output_folder, 'report/out/exons/'),
+        sample_ID,
+        RT_barcode_matching_file,
+        sequencing_type,
+    )
     print("Done with the exon post processing")
     print()
