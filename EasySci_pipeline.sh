@@ -82,11 +82,12 @@ echo
 
 ## Transfer STAR log files
 mkdir -p $output_folder/report/Log_files
-mv Log.out $output_folder/report/Log_files/
-mv Log.progress.out $output_folder/report/Log_files/
-mv Aligned.out.sam $output_folder/report/Log_files/
-mv SJ.out.tab $output_folder/report/Log_files/
-mv Log.final.out $output_folder/report/Log_files/
+# Move STAR logs produced during alignment
+mv $output_folder/STAR_alignment/*Log.out $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Log.progress.out $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Aligned.out.sam $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*SJ.out.tab $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Log.final.out $output_folder/report/Log_files/ 2>/dev/null
 
 
 ## Sorting and filtering SAM files
@@ -215,11 +216,12 @@ echo
 
 ## Transfer STAR log files
 mkdir -p $output_folder/report/Log_files
-mv Log.out $output_folder/report/Log_files/
-mv Log.progress.out $output_folder/report/Log_files/
-mv Aligned.out.sam $output_folder/report/Log_files/
-mv SJ.out.tab $output_folder/report/Log_files/
-mv Log.final.out $output_folder/report/Log_files/
+# Move STAR logs produced during alignment
+mv $output_folder/STAR_alignment/*Log.out $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Log.progress.out $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Aligned.out.sam $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*SJ.out.tab $output_folder/report/Log_files/ 2>/dev/null
+mv $output_folder/STAR_alignment/*Log.final.out $output_folder/report/Log_files/ 2>/dev/null
 
 
 ## Sorting and filtering SAM files

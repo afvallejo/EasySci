@@ -52,11 +52,14 @@ if sequencing_type == "paired-end":
     print()
 
     # Transfer STAR log files
-    os.makedirs(os.path.join(output_folder, 'report/Log_files'), exist_ok=True)
-    log_files = ['Log.out', 'Log.progress.out', 'Aligned.out.sam', 'SJ.out.tab', 'Log.final.out']
-    for log_file in log_files:
-        if os.path.exists(log_file):
-            shutil.move(log_file, os.path.join(output_folder, 'report/Log_files', log_file))
+    log_dir = os.path.join(output_folder, 'report/Log_files')
+    os.makedirs(log_dir, exist_ok=True)
+    for sample in samples:
+        prefix = os.path.join(output_folder, 'STAR_alignment', sample)
+        for suffix in ['Log.out', 'Log.progress.out', 'Aligned.out.sam', 'SJ.out.tab', 'Log.final.out']:
+            src = prefix + suffix
+            if os.path.exists(src):
+                shutil.move(src, os.path.join(log_dir, os.path.basename(src)))
 
     # Sorting and filtering SAM files
     print("Start sorting and filtering...")
@@ -211,11 +214,14 @@ else:  # single-end
     print()
 
     # Transfer STAR log files
-    os.makedirs(os.path.join(output_folder, 'report/Log_files'), exist_ok=True)
-    log_files = ['Log.out', 'Log.progress.out', 'Aligned.out.sam', 'SJ.out.tab', 'Log.final.out']
-    for log_file in log_files:
-        if os.path.exists(log_file):
-            shutil.move(log_file, os.path.join(output_folder, 'report/Log_files', log_file))
+    log_dir = os.path.join(output_folder, 'report/Log_files')
+    os.makedirs(log_dir, exist_ok=True)
+    for sample in samples:
+        prefix = os.path.join(output_folder, 'STAR_alignment', sample)
+        for suffix in ['Log.out', 'Log.progress.out', 'Aligned.out.sam', 'SJ.out.tab', 'Log.final.out']:
+            src = prefix + suffix
+            if os.path.exists(src):
+                shutil.move(src, os.path.join(log_dir, os.path.basename(src)))
 
     # Sorting and filtering SAM files
     print("Start sorting and filtering...")
