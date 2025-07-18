@@ -10,6 +10,7 @@ import multiprocessing
 import HTSeq
 from functools import partial
 import sys
+import os
 
 ## Function to read in GTF file and to send reads to be counted paralell
 def EasySci_count_parallel(gtf_file, input_folder, output_folder, sample_ID_file, core_number, randomN_barcode_file):
@@ -67,6 +68,7 @@ def EasySci_count_parallel(gtf_file, input_folder, output_folder, sample_ID_file
     gene_annotat.index =  gene_annotat[0]
     
     sample_ID = list(pd.read_csv(sample_ID_file, header=None)[0])
+    print("Found %d samples to process using %s cores" % (len(sample_ID), core_number))
         
     # generate the randomN barcode list:
     barcodes = open(randomN_barcode_file, "rb")
@@ -87,7 +89,15 @@ def EasySci_count_parallel(gtf_file, input_folder, output_folder, sample_ID_file
 ## Function to separate, count and save reads from different cells
 def EasySci_count(input_folder, output_folder, exons, genes, gene_end, gene_annotat, randomN_barcodes, sample):
     input_file_name = input_folder + "/" + sample + ".sam"
-    almnt_file = HTSeq.SAM_Reader(input_file_name)
+    print(f"Processing sample {sample} -> {input_file_name}")
+    if not os.path.exists(input_file_name):
+        print(f"ERROR: alignment file {input_file_name} not found")
+        return 1
+    try:
+        almnt_file = HTSeq.SAM_Reader(input_file_name)
+    except Exception as e:
+        print(f"ERROR opening {input_file_name}: {e}")
+        return 1
     pre_barcode = 'EMPTY'
     cell_ID = 1
     counts = collections.Counter()
