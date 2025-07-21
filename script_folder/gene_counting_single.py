@@ -93,6 +93,9 @@ def EasySci_count(input_folder, output_folder, exons, genes, gene_end, gene_anno
     if not os.path.exists(input_file_name):
         print(f"ERROR: alignment file {input_file_name} not found")
         return 1
+    if os.path.getsize(input_file_name) == 0:
+        print(f"WARNING: {input_file_name} is empty, skipping")
+        return 1
     try:
         almnt_file = HTSeq.SAM_Reader(input_file_name)
     except Exception as e:

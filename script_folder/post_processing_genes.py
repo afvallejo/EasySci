@@ -2,6 +2,7 @@
 This post processing script takes the output of the gene counting, merges the PCR batches and the random hexamer and shortdT reads from the same cells, and formats and saves the final output files.
 '''
 import sys
+import os
 import pandas as pd
 import numpy as np
 import scipy.sparse as sp
@@ -25,8 +26,13 @@ def merge_gene_count_files(input_folder, output_folder, sampleID, RT_matching_fi
     ## Open and merge the PCR batches
     for i, sample in enumerate(sample_list):
         cell_annotation_file = input_folder + sample + "_cell_annotate.csv"
-        cell_annotation = pd.read_csv(cell_annotation_file, header=None)
         count_matrix_file = input_folder + sample + ".count"
+
+        if not (os.path.exists(cell_annotation_file) and os.path.exists(count_matrix_file)):
+            print(f"Warning: missing gene count files for {sample}, skipping this sample")
+            continue
+
+        cell_annotation = pd.read_csv(cell_annotation_file, header=None)
         count_matrix = np.genfromtxt(count_matrix_file, delimiter=',')
         sparse_matrix = sp.coo_matrix((count_matrix[:,2], ((count_matrix[:,0] - 1 ), (count_matrix[:,1] - 1))), shape=(gene_annotation.shape[0], cell_annotation.shape[0]), dtype=int)
         
