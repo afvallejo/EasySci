@@ -20,21 +20,35 @@ def merge_gene_count_files(input_folder, output_folder, sampleID, RT_matching_fi
     sample_file.close()
     
     ##Open gene annotation file
-    gene_annotation_file = input_folder + "gene_name_annotate.csv"
+    gene_annotation_file = os.path.join(input_folder, "gene_name_annotate.csv")
+    if not os.path.exists(gene_annotation_file):
+        raise FileNotFoundError(
+            f"Gene annotation file {gene_annotation_file} not found. "
+            "Did the counting step finish successfully?"
+        )
     gene_annotation = pd.read_csv(gene_annotation_file, header=None)
     
     ## Open and merge the PCR batches
     for i, sample in enumerate(sample_list):
-        cell_annotation_file = input_folder + sample + "_cell_annotate.csv"
-        count_matrix_file = input_folder + sample + ".count"
+        cell_annotation_file = os.path.join(input_folder, f"{sample}_cell_annotate.csv")
+        count_matrix_file = os.path.join(input_folder, f"{sample}.count")
 
         if not (os.path.exists(cell_annotation_file) and os.path.exists(count_matrix_file)):
             print(f"Warning: missing gene count files for {sample}, skipping this sample")
             continue
 
-        cell_annotation = pd.read_csv(cell_annotation_file, header=None)
-        count_matrix = np.genfromtxt(count_matrix_file, delimiter=',')
-        sparse_matrix = sp.coo_matrix((count_matrix[:,2], ((count_matrix[:,0] - 1 ), (count_matrix[:,1] - 1))), shape=(gene_annotation.shape[0], cell_annotation.shape[0]), dtype=int)
+        try:
+            cell_annotation = pd.read_csv(cell_annotation_file, header=None)
+            count_matrix = np.genfromtxt(count_matrix_file, delimiter=',')
+        except Exception as e:
+            print(f"Warning: failed to read gene count files for {sample}: {e}")
+            continue
+
+        sparse_matrix = sp.coo_matrix(
+            (count_matrix[:, 2], ((count_matrix[:, 0] - 1), (count_matrix[:, 1] - 1))),
+            shape=(gene_annotation.shape[0], cell_annotation.shape[0]),
+            dtype=int,
+        )
         
         if i == 0:
             final_cell_annotation = cell_annotation
@@ -43,7 +57,11 @@ def merge_gene_count_files(input_folder, output_folder, sampleID, RT_matching_fi
             final_cell_annotation = pd.concat([final_cell_annotation, cell_annotation])
             final_count_matrix = sp.hstack([final_count_matrix, sparse_matrix])
     
-    ## Merge exonic and intronic reads   
+    if 'final_cell_annotation' not in locals():
+        print("Warning: no valid gene count files found. Skipping post processing.")
+        return
+
+    ## Merge exonic and intronic reads
     final_count_matrix_exon = final_count_matrix.tocsr()[np.where((gene_annotation[2] == "exon"))[0] ,:]
     final_count_matrix_intron = final_count_matrix.tocsr()[np.where((gene_annotation[2] == "intron"))[0] ,:]
     final_count_matrix_combined = final_count_matrix_exon + final_count_matrix_intron
